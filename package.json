@@ -1,0 +1,34 @@
+{
+  "name": "scene-gaussian-splat-viewer",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "server": "node server.js"
+  },
+  "bugs": {
+    "url": "https://github.com/iab131/Scene-Gaussian-Splat-Viewer/issues"
+  },
+  "homepage": "https://github.com/iab131/Scene-Gaussian-Splat-Viewer#readme",
+  "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@mkkellogg/gaussian-splats-3d": "^0.4.7",
+    "@tailwindcss/vite": "^4.1.18",
+    "@vitejs/plugin-react": "^5.1.3",
+    "autoprefixer": "^10.4.24",
+    "body-parser": "^2.2.2",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "fluent-ffmpeg": "^2.1.3",
+    "postcss": "^8.5.6",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "tailwindcss": "^4.1.18",
+    "three": "^0.182.0",
+    "vite": "^7.3.1"
+  }
+}
