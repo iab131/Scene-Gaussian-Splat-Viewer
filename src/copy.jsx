@@ -140,28 +140,21 @@ const performAutoFrame = (splat) => {
   const controls = controlsRef.current;
   if (!splat || !camera || !controls) return;
 
-  // Get scene bounds
+  // Prefer explicit bounds if available
   const center = splat.center?.clone() ?? new THREE.Vector3();
   const radius = splat.radius ?? 5;
 
-  // Calculate required distance to fit scene in view
   const fov = THREE.MathUtils.degToRad(camera.fov);
-  const distance = (radius / Math.tan(fov / 2)) * 1.8;
+  const distance = radius / Math.tan(fov / 2);
 
-  // Get current camera direction (preserve rotation)
-  const currentDirection = new THREE.Vector3();
-  camera.getWorldDirection(currentDirection);
-  
-  // Position camera at the calculated distance from center, along current view direction
-  // Camera looks in -Z direction, so we need to move opposite to the direction
-  camera.position.copy(center).sub(currentDirection.multiplyScalar(distance));
+  camera.position.copy(center)
+    .add(new THREE.Vector3(0, radius * 0.2, distance * 1.2));
 
-  // Update near/far planes based on scene size
-  camera.near = Math.max(0.01, distance / 100);
+  camera.lookAt(center);
+  camera.near = distance / 100;
   camera.far = distance * 100;
   camera.updateProjectionMatrix();
 
-  // Update controls target to center (camera rotation stays the same)
   controls.target.copy(center);
   controls.update();
 };
@@ -192,7 +185,7 @@ const loadFile = async (file) => {
 
         setHasScene(true);
         setTimeout(() => {
-            resetView();
+            performAutoFrame(splatMesh);
         }, 200);
 
     } catch (err) {
@@ -235,17 +228,8 @@ const loadFile = async (file) => {
 
 
   const resetView = () => {
-    if (!cameraRef.current || !controlsRef.current) return;
-    
-    // Reset camera to default position
-    cameraRef.current.position.set(0, 1, 1);
-    cameraRef.current.lookAt(0, 0, 0);
-    cameraRef.current.updateProjectionMatrix();
-    
-    // Reset controls target to origin
-    controlsRef.current.target.set(0, 1, 0);
-    controlsRef.current.update();
-  };
+    performAutoFrame(viewerRef.current.getSplatMesh());
+};
 
 const frameScene = () => {
     performAutoFrame(viewerRef.current.getSplatMesh());
