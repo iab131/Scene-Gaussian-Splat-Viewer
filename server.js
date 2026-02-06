@@ -22,6 +22,7 @@ app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 let videoStream = null;
 let ffmpegCommand = null;
 let isRecording = false;
+let frameCount = 0;
 
 app.post('/start-export', (req, res) => {
     if (isRecording) {
@@ -32,6 +33,7 @@ app.post('/start-export', (req, res) => {
     
     console.log(`Starting export: ${filename} at ${fps} fps`);
     isRecording = true;
+    frameCount = 0;
 
     // Create a PassThrough stream to pipe data to ffmpeg
     videoStream = new PassThrough();
@@ -44,11 +46,15 @@ app.post('/start-export', (req, res) => {
             '-c:v libx264',
             '-pix_fmt yuv420p',
             '-preset fast',
+            '-crf 18',  // High quality
             '-movflags +faststart'
         ])
         .output(path.resolve(process.cwd(), filename))
         .on('start', (commandLine) => {
             console.log('FFmpeg process started:', commandLine);
+        })
+        .on('progress', (progress) => {
+            console.log('FFmpeg progress:', progress.frames, 'frames');
         })
         .on('error', (err) => {
             console.error('FFmpeg error:', err);
@@ -76,13 +82,25 @@ app.post('/export-frame', (req, res) => {
     }
 
     try {
-        // Strip the data:image/jpeg;base64 part
-        const base64Data = image.replace(/^data:image\/jpeg;base64,/, "");
+        // Handle both JPEG and PNG formats
+        let base64Data = image;
+        if (image.startsWith('data:image/jpeg;base64,')) {
+            base64Data = image.replace(/^data:image\/jpeg;base64,/, '');
+        } else if (image.startsWith('data:image\/png;base64,')) {
+            base64Data = image.replace(/^data:image\/png;base64,/, '');
+        }
+        
         const buffer = Buffer.from(base64Data, 'base64');
         
         // Write to stream
         videoStream.write(buffer);
-        res.json({ success: true });
+        frameCount++;
+        
+        if (frameCount % 30 === 0) {
+            console.log(`Received frame ${frameCount}`);
+        }
+        
+        res.json({ success: true, frame: frameCount });
     } catch (err) {
         console.error('Error writing frame:', err);
         res.status(500).json({ error: 'Failed to write frame' });

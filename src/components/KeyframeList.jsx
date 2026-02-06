@@ -55,7 +55,13 @@ export default function KeyframeList({
         Keyframes ({keyframes.length})
       </div>
       
-      <div className="max-h-32 overflow-y-auto space-y-1">
+      <div 
+        className="max-h-32 overflow-y-auto space-y-1 pr-1"
+        style={{
+          scrollbarWidth: 'thin',
+          scrollbarColor: '#475569 transparent'
+        }}
+      >
         {keyframes.map((kf, index) => {
           const isDragging = dragIndex === index;
           const isDropTarget = dropIndex === index;

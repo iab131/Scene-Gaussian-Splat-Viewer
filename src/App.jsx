@@ -17,7 +17,7 @@ import { CameraPathControls } from './components/CameraPathControls';
 
 // Utils
 import { performAutoFrame, resetCameraView } from './utils/cameraUtils';
-import { startExport } from './utils/exportUtils';
+import { startPathExport } from './utils/exportUtils';
 
 
 export default function App() {
@@ -109,20 +109,29 @@ export default function App() {
     }
   }, [viewerRef, cameraRef, controlsRef]);
 
-  // Export action
+  // Export action - exports camera path to MP4
   const handleExport = useCallback(async () => {
     if (isExporting || !hasScene) return;
+    if (keyframes.length < 2) {
+      alert('Add at least 2 keyframes to export a camera path video');
+      return;
+    }
     
-    await startExport({
+    await startPathExport({
       cameraRef,
       controlsRef,
       rendererRef,
       viewerRef,
       requestRef,
+      keyframes,
       setExportProgress,
-      setIsExporting
+      setIsExporting,
+      duration: 5000,  // 5 second video
+      fps: 30,
+      width: 1280,
+      height: 720
     });
-  }, [isExporting, hasScene, cameraRef, controlsRef, rendererRef, viewerRef, requestRef]);
+  }, [isExporting, hasScene, keyframes, cameraRef, controlsRef, rendererRef, viewerRef, requestRef]);
 
   // File selection
   const handleSelectFile = useCallback(() => {
