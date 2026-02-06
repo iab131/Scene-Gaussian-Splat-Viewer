@@ -7,7 +7,7 @@ export function WalkModeOverlay({ isVisible }) {
   if (!isVisible) return null;
 
   return (
-    <div className="absolute top-4 right-4 z-10 p-4 bg-orange-900/80 border border-orange-500/50 rounded-lg shadow-xl backdrop-blur-sm">
+    <div className="absolute top-4 right-4 z-10 p-4 bg-orange-900/80 border border-orange-500/50 rounded-lg shadow-xl">
       <div className="flex items-center gap-2 mb-2">
         <div className="w-2 h-2 bg-orange-400 rounded-full animate-pulse"></div>
         <span className="text-sm font-bold text-orange-300">WALK MODE</span>

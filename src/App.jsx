@@ -75,12 +75,16 @@ export default function App() {
 
   // Camera path recording
   const {
+    keyframes,
     keyframeCount,
     isPlaying,
     addKeyframe,
+    removeKeyframe,
+    reorderKeyframes,
     clearKeyframes,
     playPath,
-    stopPlayback
+    stopPlayback,
+    seekTo
   } = useCameraPath({
     cameraRef,
     controlsRef,
@@ -164,12 +168,16 @@ export default function App() {
       {/* Camera Path Controls - show when scene is loaded */}
       {hasScene && (
         <CameraPathControls
+          keyframes={keyframes}
           keyframeCount={keyframeCount}
           isPlaying={isPlaying}
           onAddKeyframe={addKeyframe}
+          onDeleteKeyframe={removeKeyframe}
+          onReorderKeyframes={reorderKeyframes}
           onClearKeyframes={clearKeyframes}
           onPlayPath={playPath}
           onStopPlayback={stopPlayback}
+          onSeek={seekTo}
           disabled={isExporting}
         />
       )}

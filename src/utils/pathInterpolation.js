@@ -186,7 +186,12 @@ function areQuaternionsSimilar(quaternions, threshold = 0.9999) {
 
 /**
  * Get interpolated camera state at time t
- * Combines position (spline), rotation (slerp), and FOV (linear)
+ * 
+ * Smooth playback is achieved through:
+ * - Position: Catmull-Rom spline (passes through all keyframes smoothly)
+ * - Rotation: Quaternion slerp (shortest path, no gimbal lock)
+ * - FOV: Linear interpolation
+ * - Timing: Smoothstep ease-in/out (cinematic acceleration/deceleration)
  * 
  * IMPORTANT: If all keyframes have the same rotation, no rotation interpolation
  * is performed - this prevents unwanted rotation when user only pans.
@@ -205,7 +210,17 @@ export function interpolateCameraPath(keyframes, t, useEasing = true) {
     };
   }
 
-  // Apply easing for cinematic motion
+  // Single keyframe - return it directly
+  if (keyframes.length === 1) {
+    return {
+      position: keyframes[0].position.clone(),
+      quaternion: keyframes[0].quaternion.clone().normalize(),
+      fov: keyframes[0].fov
+    };
+  }
+
+  // Apply smoothstep easing for cinematic motion
+  // This creates smooth acceleration at start and deceleration at end
   const easedT = useEasing ? smoothstep(t) : t;
 
   // Extract arrays for interpolation
@@ -217,32 +232,21 @@ export function interpolateCameraPath(keyframes, t, useEasing = true) {
   // This fixes the issue where panning (without rotating) causes unwanted rotation
   const rotationIsSame = areQuaternionsSimilar(quaternions);
   
-  // Debug: log once at start of playback
-  if (t === 0 || (t > 0 && t < 0.01)) {
-    console.log('Path playback started:', {
-      keyframeCount: keyframes.length,
-      rotationIsSame,
-      quaternions: quaternions.map(q => ({
-        x: q.x.toFixed(4),
-        y: q.y.toFixed(4),
-        z: q.z.toFixed(4),
-        w: q.w.toFixed(4)
-      }))
-    });
-  }
-  
   let resultQuaternion;
   if (rotationIsSame) {
     // All keyframes have same orientation - use first one exactly
     resultQuaternion = quaternions[0].clone().normalize();
   } else {
-    // Keyframes have different orientations - interpolate
+    // Keyframes have different orientations - smoothly slerp between them
     resultQuaternion = slerpQuaternions(quaternions, easedT);
   }
 
   return {
+    // Smooth spline path through all keyframe positions
     position: catmullRomSpline(positions, easedT),
+    // Smooth rotation (slerp if different, constant if same)
     quaternion: resultQuaternion,
+    // Linear FOV interpolation
     fov: interpolateFov(fovs, easedT)
   };
 }

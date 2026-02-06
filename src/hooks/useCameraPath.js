@@ -52,16 +52,9 @@ export function useCameraPath({ cameraRef, controlsRef, rendererRef }) {
       
       // Camera FOV
       fov: camera.fov,
-      
       // Timestamp for ordering
       timestamp: Date.now()
     };
-
-    console.log('Keyframe added:', {
-      position: newKeyframe.position.toArray().map(v => v.toFixed(3)),
-      quaternion: newKeyframe.quaternion.toArray().map(v => v.toFixed(4)),
-      direction: newKeyframe.direction.toArray().map(v => v.toFixed(3))
-    });
 
     setKeyframes(prev => [...prev, newKeyframe]);
   }, [cameraRef]);
@@ -169,15 +162,6 @@ export function useCameraPath({ cameraRef, controlsRef, rendererRef }) {
       // Rotation: apply quaternion directly (already normalized in interpolation)
       camera.quaternion.copy(state.quaternion);
       
-      // Debug: Log what we're setting vs what camera has (first few frames only)
-      if (t < 0.05) {
-        console.log('Playback frame:', {
-          t: t.toFixed(4),
-          stateQuat: [state.quaternion.x.toFixed(4), state.quaternion.y.toFixed(4), state.quaternion.z.toFixed(4), state.quaternion.w.toFixed(4)],
-          cameraQuat: [camera.quaternion.x.toFixed(4), camera.quaternion.y.toFixed(4), camera.quaternion.z.toFixed(4), camera.quaternion.w.toFixed(4)]
-        });
-      }
-      
       // FOV: apply if changed
       if (camera.fov !== state.fov) {
         camera.fov = state.fov;
@@ -199,6 +183,53 @@ export function useCameraPath({ cameraRef, controlsRef, rendererRef }) {
     playbackRef.current = requestAnimationFrame(animate);
   }, [keyframes, isPlaying, cameraRef, controlsRef, rendererRef, stopPlayback]);
 
+  /**
+   * Seek to a specific position on the path (for timeline scrubbing)
+   * Uses the same camera evaluation as Preview Play
+   * @param {number} t - Normalized time [0, 1]
+   */
+  const seekTo = useCallback((t) => {
+    if (keyframes.length < 2) return;
+    
+    const camera = cameraRef.current;
+    const controls = controlsRef.current;
+    const renderer = rendererRef.current;
+    if (!camera || !controls) return;
+
+    // Exit walk mode if active (same as playPath)
+    if (document.pointerLockElement === renderer?.domElement) {
+      document.exitPointerLock();
+    }
+
+    // Disable controls during seek (prevents any interference)
+    controls.enabled = false;
+
+    // Get interpolated camera state at time t
+    // Use NO easing for scrubbing (linear = more intuitive dragging)
+    const state = interpolateCameraPath(keyframes, t, false);
+
+    // Apply EXACT state to camera (same as playback loop)
+    camera.position.copy(state.position);
+    camera.quaternion.copy(state.quaternion);
+    
+    if (camera.fov !== state.fov) {
+      camera.fov = state.fov;
+      camera.updateProjectionMatrix();
+    }
+    
+    // CRITICAL: Update world matrix for frustum culling
+    camera.updateMatrixWorld(true);
+
+    // Update orbit controls target to match current camera view
+    // This prevents camera from snapping back when controls are re-enabled
+    const forward = new THREE.Vector3();
+    camera.getWorldDirection(forward);
+    controls.target.copy(camera.position).add(forward.multiplyScalar(5));
+
+    // Re-enable controls
+    controls.enabled = true;
+  }, [keyframes, cameraRef, controlsRef, rendererRef]);
+
   return {
     // State
     keyframes,
@@ -211,6 +242,7 @@ export function useCameraPath({ cameraRef, controlsRef, rendererRef }) {
     reorderKeyframes,
     clearKeyframes,
     playPath,
-    stopPlayback
+    stopPlayback,
+    seekTo
   };
 }
