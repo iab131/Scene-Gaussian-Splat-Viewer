@@ -6,10 +6,11 @@ import { SceneFormat } from '@mkkellogg/gaussian-splats-3d';
  * @param {Object} params - Parameters
  * @param {React.RefObject} params.viewerRef - Gaussian viewer reference
  * @param {React.RefObject} params.sceneRef - Three.js scene reference
+ * @param {Function} params.onLoadStart - Callback when load starts (e.g., clear keyframes)
  * @param {Function} params.onLoadComplete - Callback when load completes
  * @returns {Object} Loading state and handlers
  */
-export function useFileLoader({ viewerRef, sceneRef, onLoadComplete }) {
+export function useFileLoader({ viewerRef, sceneRef, onLoadStart, onLoadComplete }) {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [hasScene, setHasScene] = useState(false);
@@ -18,6 +19,9 @@ export function useFileLoader({ viewerRef, sceneRef, onLoadComplete }) {
   const loadFile = useCallback(async (file) => {
     const url = URL.createObjectURL(file);
     setLoading(true);
+    
+    // Call onLoadStart callback (e.g., to clear keyframes)
+    if (onLoadStart) onLoadStart();
     
     try {
       // Clear scene first
@@ -54,7 +58,7 @@ export function useFileLoader({ viewerRef, sceneRef, onLoadComplete }) {
     } finally {
       setLoading(false);
     }
-  }, [viewerRef, sceneRef, onLoadComplete]);
+  }, [viewerRef, sceneRef, onLoadStart, onLoadComplete]);
 
   const handleFileChange = useCallback((event) => {
     const file = event.target.files[0];

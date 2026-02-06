@@ -124,8 +124,10 @@ export function useThreeSetup(containerRef, { setFps, setSplatCount }) {
         cam.position.add(moveVector);
       }
 
-      // Only update OrbitControls when not in walk mode
-      if (controlsRef.current && document.pointerLockElement !== renderer.domElement) {
+      // Only update OrbitControls when enabled and not in walk mode
+      // CRITICAL: Don't call update() during path playback (when controls.enabled = false)
+      // because it would override our camera rotation changes
+      if (controlsRef.current && controlsRef.current.enabled && document.pointerLockElement !== renderer.domElement) {
         controlsRef.current.update();
       }
 

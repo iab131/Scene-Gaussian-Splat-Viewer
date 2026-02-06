@@ -4,4 +4,8 @@ body {
   margin: 0;
   overflow: hidden;
   background-color: #001524;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
 }

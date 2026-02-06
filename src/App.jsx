@@ -4,6 +4,7 @@ import React, { useRef, useState, useCallback } from 'react';
 import { useThreeSetup } from './hooks/useThreeSetup';
 import { useWalkControls } from './hooks/useWalkControls';
 import { useFileLoader } from './hooks/useFileLoader';
+import { useCameraPath } from './hooks/useCameraPath';
 
 // Components
 import { StatsPanel } from './components/StatsPanel';
@@ -12,6 +13,7 @@ import { EmptyState } from './components/EmptyState';
 import { WalkModeOverlay } from './components/WalkModeOverlay';
 import { DragOverlay } from './components/DragOverlay';
 import { ControlsBar } from './components/ControlsBar';
+import { CameraPathControls } from './components/CameraPathControls';
 
 // Utils
 import { performAutoFrame, resetCameraView } from './utils/cameraUtils';
@@ -21,6 +23,7 @@ import { startExport } from './utils/exportUtils';
 export default function App() {
   const containerRef = useRef(null);
   const fileInputRef = useRef(null);
+  const clearKeyframesRef = useRef(() => {});
 
   // Stats state
   const [fps, setFps] = useState(0);
@@ -54,6 +57,7 @@ export default function App() {
   } = useFileLoader({
     viewerRef,
     sceneRef,
+    onLoadStart: () => clearKeyframesRef.current(),
     onLoadComplete: () => resetCameraView(cameraRef.current, controlsRef.current)
   });
 
@@ -68,6 +72,23 @@ export default function App() {
     rendererRef,
     keysPressed
   });
+
+  // Camera path recording
+  const {
+    keyframeCount,
+    isPlaying,
+    addKeyframe,
+    clearKeyframes,
+    playPath,
+    stopPlayback
+  } = useCameraPath({
+    cameraRef,
+    controlsRef,
+    rendererRef
+  });
+
+  // Keep clearKeyframesRef in sync
+  clearKeyframesRef.current = clearKeyframes;
 
   // Camera actions
   const handleResetView = useCallback(() => {
@@ -139,6 +160,19 @@ export default function App() {
 
       {/* UI Panels */}
       <StatsPanel fps={fps} splatCount={splatCount} />
+      
+      {/* Camera Path Controls - show when scene is loaded */}
+      {hasScene && (
+        <CameraPathControls
+          keyframeCount={keyframeCount}
+          isPlaying={isPlaying}
+          onAddKeyframe={addKeyframe}
+          onClearKeyframes={clearKeyframes}
+          onPlayPath={playPath}
+          onStopPlayback={stopPlayback}
+          disabled={isExporting}
+        />
+      )}
       
       <WalkModeOverlay isVisible={isPointerLocked} />
 
