@@ -43,7 +43,7 @@ export default function KeyframeList({
 
   if (keyframes.length === 0) {
     return (
-      <div className="text-xs text-slate-500 text-center py-3 border border-dashed border-slate-700 rounded mb-3">
+      <div className="text-xs text-slate-400 text-center py-3 border border-dashed border-slate-700 rounded mb-3">
         No keyframes recorded
       </div>
     );
@@ -51,7 +51,7 @@ export default function KeyframeList({
 
   return (
     <div className="mb-3">
-      <div className="text-xs text-slate-400 mb-1">
+      <div className="text-xs text-slate-300 mb-1">
         Keyframes ({keyframes.length})
       </div>
       
@@ -88,7 +88,7 @@ export default function KeyframeList({
               onDragLeave={(e) => {
                 e.stopPropagation();
               }}
-              className={`flex items-center gap-2 px-2 py-1 rounded text-xs transition-all ${
+              className={`flex items-center gap-2 px-2 py-1 rounded-lg text-xs transition-all ${
                 isDragging 
                   ? 'opacity-50 bg-slate-700' 
                   : isDropTarget 
@@ -97,13 +97,13 @@ export default function KeyframeList({
               } ${isPlaying ? 'opacity-50' : 'cursor-grab active:cursor-grabbing'}`}
             >
               {/* Drag handle */}
-              <span className="text-slate-500 select-none">≡</span>
+              <span className="text-slate-400 select-none text-[16px]">≡</span>
               
               {/* Index */}
               <span className="text-slate-300 font-mono w-4">{index + 1}</span>
               
               {/* Position preview */}
-              <span className="text-slate-500 flex-1 truncate text-[10px]">
+              <span className="text-slate-300 flex-1 truncate text-[12px]">
                 ({kf.position.x.toFixed(1)}, {kf.position.y.toFixed(1)}, {kf.position.z.toFixed(1)})
               </span>
               
@@ -114,7 +114,7 @@ export default function KeyframeList({
                   if (!isPlaying) onDelete?.(index);
                 }}
                 disabled={isPlaying}
-                className="text-red-400 hover:text-red-300 hover:bg-red-900/30 px-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                className="text-red-400 text-[16px] hover:text-red-300 hover:bg-red-900/30 px-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Delete keyframe"
               >
                 🗑

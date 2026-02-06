@@ -31,7 +31,7 @@ export function CameraPathControls({
       onDragLeave={(e) => { e.stopPropagation(); }}
       onDrop={(e) => { e.stopPropagation(); e.preventDefault(); }}
     >
-      <h2 className="text-xs uppercase tracking-wider text-slate-400 mb-3 border-b border-slate-700 pb-1">
+      <h2 className="text-xs uppercase tracking-wider text-slate-300 mb-3 border-b border-slate-700 pb-1">
         Camera Path
       </h2>
 
@@ -100,7 +100,7 @@ export function CameraPathControls({
 
       {/* Help text */}
       {keyframeCount < 2 && !isPlaying && (
-        <div className="mt-3 text-xs text-slate-500 text-center">
+        <div className="mt-3 text-xs text-slate-400 text-center">
           Add at least 2 keyframes to preview
         </div>
       )}
