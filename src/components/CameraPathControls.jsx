@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import Timeline from './Timeline';
 import KeyframeList from './KeyframeList';
 
@@ -19,6 +19,9 @@ export function CameraPathControls({
   onSeek,
   disabled = false
 }) {
+  // Duration state (in ms) - configurable from 1-30 seconds
+  const [duration, setDuration] = useState(5000);
+  
   const canPlay = keyframeCount >= 2 && !isPlaying;
   const showStop = isPlaying;
 
@@ -37,10 +40,11 @@ export function CameraPathControls({
 
       {/* Section 1: Timeline (top) */}
       <Timeline
-        duration={5000}
+        duration={duration}
         keyframeCount={keyframeCount}
         isPlaying={isPlaying}
         onSeek={onSeek}
+        onDurationChange={setDuration}
       />
 
       {/* Section 2: Keyframe List (middle) */}
@@ -72,7 +76,7 @@ export function CameraPathControls({
           </button>
         ) : (
           <button
-            onClick={() => onPlayPath(5000)}
+            onClick={() => onPlayPath(duration)}
             disabled={!canPlay || disabled}
             className="w-full px-4 py-2 text-sm font-medium bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-all hover:shadow-[0_0_15px_rgba(139,92,246,0.4)] active:scale-95"
           >
@@ -107,3 +111,4 @@ export function CameraPathControls({
     </div>
   );
 }
+

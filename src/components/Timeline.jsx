@@ -1,19 +1,24 @@
 import { useRef, useCallback, useState } from 'react';
 
 /**
- * Timeline component with draggable scrubber
+ * Timeline component with draggable scrubber and adjustable duration
  * Professional video editor style with smooth interactions
  */
 export default function Timeline({ 
   duration = 5000, 
   keyframeCount = 0,
   isPlaying = false,
-  onSeek 
+  onSeek,
+  onDurationChange
 }) {
   const trackRef = useRef(null);
   const [scrubberPosition, setScrubberPosition] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
+  const [isEditingDuration, setIsEditingDuration] = useState(false);
+
+  // Duration in seconds for display
+  const durationSeconds = duration / 1000;
 
   // Calculate t from mouse position
   const getTimeFromEvent = useCallback((e) => {
@@ -48,18 +53,123 @@ export default function Timeline({
     setIsDragging(false);
   }, []);
 
+  // Handle duration change from quick select buttons (closes popup)
+  const handleQuickSelect = useCallback((newDurationSeconds) => {
+    const clamped = Math.max(1, Math.min(30, newDurationSeconds));
+    onDurationChange?.(clamped * 1000);
+    setIsEditingDuration(false);
+  }, [onDurationChange]);
+
+  // Handle duration change from slider (keeps popup open)
+  const handleSliderChange = useCallback((newDurationSeconds) => {
+    const clamped = Math.max(1, Math.min(30, newDurationSeconds));
+    onDurationChange?.(clamped * 1000);
+  }, [onDurationChange]);
+
   const isDisabled = keyframeCount < 2 || isPlaying;
   const currentTime = ((scrubberPosition * duration) / 1000).toFixed(1);
-  const totalTime = (duration / 1000).toFixed(1);
+  const totalTime = durationSeconds.toFixed(1);
 
   return (
     <div className="mb-4">
       {/* Header */}
-      <div className="flex justify-between text-xs text-slate-300 mb-2">
+      <div className="flex justify-between items-center text-xs text-slate-300 mb-2">
         <span className="font-medium">Timeline</span>
-        <span className="font-mono text-slate-400">
-          {currentTime}s <span className="text-slate-500">/</span> {totalTime}s
-        </span>
+        <div className="flex items-center gap-1 font-mono">
+          <span className="text-slate-400">{currentTime}s</span>
+          <span className="text-slate-500">/</span>
+          {/* Clickable duration selector */}
+          <div className="relative">
+            <button
+              onClick={() => !isPlaying && setIsEditingDuration(!isEditingDuration)}
+              disabled={isPlaying}
+              className={`px-1.5 py-0.5 rounded transition-all ${
+                isPlaying 
+                  ? 'text-slate-500 cursor-not-allowed' 
+                  : 'text-cyan-400 hover:bg-slate-700 hover:text-cyan-300 cursor-pointer'
+              }`}
+              title="Click to change duration"
+            >
+              {totalTime}s
+            </button>
+            
+            {/* Duration editor popup */}
+            {isEditingDuration && (
+              <div className="absolute right-0 top-full mt-1 z-20 bg-slate-800 border border-slate-600 rounded-lg p-3 shadow-xl min-w-[140px]">
+                <div className="text-xs text-slate-400 mb-2">Duration (sec)</div>
+                <div className="flex flex-col gap-2">
+                  {/* Quick select buttons */}
+                  <div className="grid grid-cols-3 gap-1">
+                    {[1, 3, 5].map(sec => (
+                      <button
+                        key={sec}
+                        onClick={() => handleQuickSelect(sec)}
+                        className={`py-1 text-xs text-center rounded transition-all ${
+                          durationSeconds === sec
+                            ? 'bg-cyan-600 text-white'
+                            : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                        }`}
+                      >
+                        {sec}s
+                      </button>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-3 gap-1">
+                    {[7, 10, 15].map(sec => (
+                      <button
+                        key={sec}
+                        onClick={() => handleQuickSelect(sec)}
+                        className={`py-1 text-xs text-center rounded transition-all ${
+                          durationSeconds === sec
+                            ? 'bg-cyan-600 text-white'
+                            : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                        }`}
+                      >
+                        {sec}s
+                      </button>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-3 gap-1">
+                    {[20, 25, 30].map(sec => (
+                      <button
+                        key={sec}
+                        onClick={() => handleQuickSelect(sec)}
+                        className={`py-1 text-xs text-center rounded transition-all ${
+                          durationSeconds === sec
+                            ? 'bg-cyan-600 text-white'
+                            : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                        }`}
+                      >
+                        {sec}s
+                      </button>
+                    ))}
+                  </div>
+                  {/* Range slider */}
+                  <input
+                    type="range"
+                    min="1"
+                    max="30"
+                    step="0.5"
+                    value={durationSeconds}
+                    onChange={(e) => handleSliderChange(parseFloat(e.target.value))}
+                    className="w-full accent-cyan-500 mt-1"
+                  />
+                  <div className="flex justify-between text-[10px] text-slate-500">
+                    <span>1s</span>
+                    <span>30s</span>
+                  </div>
+                </div>
+                {/* Close on outside click */}
+                <button
+                  onClick={() => setIsEditingDuration(false)}
+                  className="absolute -top-1 -right-1 w-4 h-4 bg-slate-700 rounded-full text-slate-400 hover:bg-slate-600 hover:text-white text-[10px] flex items-center justify-center"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
       
       {/* Track container with padding for thumb overflow */}
@@ -138,6 +248,15 @@ export default function Timeline({
           )}
         </div>
       </div>
+      
+      {/* Click outside to close duration editor */}
+      {isEditingDuration && (
+        <div 
+          className="fixed inset-0 z-10" 
+          onClick={() => setIsEditingDuration(false)}
+        />
+      )}
     </div>
   );
 }
+
