@@ -74,6 +74,8 @@ export function useWalkControls({ cameraRef, controlsRef, rendererRef, keysPress
       euler.current.y -= movementX * mouseSensitivity.current;
       euler.current.x -= movementY * mouseSensitivity.current;
       euler.current.x = Math.max(MIN_PITCH, Math.min(MAX_PITCH, euler.current.x));
+      // Always keep roll at 0 to ensure level horizon (world-up constraint)
+      euler.current.z = 0;
 
       camera.quaternion.setFromEuler(euler.current);
     };
@@ -154,7 +156,27 @@ export function useWalkControls({ cameraRef, controlsRef, rendererRef, keysPress
     if (!isCurrentlyInWalkMode) {
       setCameraMode('walk');
       controlsRef.current.enabled = false;
+      
+      const camera = cameraRef.current;
+      console.log('Entering walk mode - camera state:',
+        'up:', camera.up,
+        'rotation:', camera.rotation,
+        'quaternion:', camera.quaternion
+      );
+      
+      // Extract euler angles from current camera orientation
       euler.current.setFromQuaternion(cameraRef.current.quaternion);
+      // Reset roll to 0 to ensure level horizon when entering walk mode
+      // This prevents camera tilt caused by export or other operations
+      euler.current.z = 0;
+      // Apply the corrected orientation back to the camera
+      cameraRef.current.quaternion.setFromEuler(euler.current);
+      
+      console.log('After roll correction:',
+        'up:', camera.up,
+        'rotation:', camera.rotation,
+        'quaternion:', camera.quaternion
+      );
 
       rendererRef.current.domElement.requestPointerLock().catch((err) => {
         console.warn('Pointer lock request failed:', err);

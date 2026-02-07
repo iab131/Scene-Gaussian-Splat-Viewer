@@ -14,6 +14,7 @@ import { WalkModeOverlay } from './components/WalkModeOverlay';
 import { DragOverlay } from './components/DragOverlay';
 import { ControlsBar } from './components/ControlsBar';
 import { CameraPathControls } from './components/CameraPathControls';
+import { ExportDialog } from './components/ExportDialog';
 
 // Utils
 import { performAutoFrame, resetCameraView } from './utils/cameraUtils';
@@ -32,6 +33,7 @@ export default function App() {
   // Export state
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
+  const [showExportDialog, setShowExportDialog] = useState(false);
 
   // Three.js setup
   const {
@@ -109,13 +111,19 @@ export default function App() {
     }
   }, [viewerRef, cameraRef, controlsRef]);
 
-  // Export action - exports camera path to MP4
-  const handleExport = useCallback(async () => {
+  // Open export dialog
+  const handleOpenExportDialog = useCallback(() => {
     if (isExporting || !hasScene) return;
     if (keyframes.length < 2) {
       alert('Add at least 2 keyframes to export a camera path video');
       return;
     }
+    setShowExportDialog(true);
+  }, [isExporting, hasScene, keyframes.length]);
+
+  // Export action - called from dialog with duration in seconds
+  const handleExport = useCallback(async (durationSeconds) => {
+    setShowExportDialog(false);
     
     await startPathExport({
       cameraRef,
@@ -126,12 +134,12 @@ export default function App() {
       keyframes,
       setExportProgress,
       setIsExporting,
-      duration: 5000,  // 5 second video
+      duration: durationSeconds * 1000,  // Convert to milliseconds
       fps: 30,
       width: 1280,
       height: 720
     });
-  }, [isExporting, hasScene, keyframes, cameraRef, controlsRef, rendererRef, viewerRef, requestRef]);
+  }, [keyframes, cameraRef, controlsRef, rendererRef, viewerRef, requestRef]);
 
   // File selection
   const handleSelectFile = useCallback(() => {
@@ -200,8 +208,18 @@ export default function App() {
         onFrameScene={handleFrameScene}
         onToggleCameraMode={toggleCameraMode}
         onLoadFile={handleSelectFile}
+        onExport={handleOpenExportDialog}
+      />
+
+      {/* Export Dialog */}
+      <ExportDialog
+        isOpen={showExportDialog}
+        onClose={() => setShowExportDialog(false)}
         onExport={handleExport}
+        keyframeCount={keyframeCount}
+        defaultDuration={5}
       />
     </div>
   );
 }
+

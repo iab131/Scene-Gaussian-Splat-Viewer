@@ -1,4 +1,65 @@
 import { interpolateCameraPath } from './pathInterpolation';
+import * as THREE from 'three';
+
+/**
+ * Validate and clamp export duration
+ * @param {number} durationMs - Duration in milliseconds
+ * @returns {number} Clamped duration in milliseconds (1000-30000)
+ */
+function validateDuration(durationMs) {
+  const minMs = 1000;   // 1 second
+  const maxMs = 30000;  // 30 seconds
+  return Math.max(minMs, Math.min(maxMs, durationMs));
+}
+
+/**
+ * Prompt user to save file using File System Access API
+ * Falls back to regular download if API not available
+ * 
+ * @param {Blob} blob - The video blob to save
+ * @param {string} suggestedName - Suggested filename
+ * @returns {Promise<boolean>} Whether save was successful
+ */
+async function promptSaveFile(blob, suggestedName) {
+  // Try File System Access API for native save dialog
+  if ('showSaveFilePicker' in window) {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName,
+        types: [{
+          description: 'MP4 Video',
+          accept: { 'video/mp4': ['.mp4'] }
+        }]
+      });
+      
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      
+      return true;
+    } catch (err) {
+      // User cancelled the save dialog
+      if (err.name === 'AbortError') {
+        console.log('User cancelled file save');
+        return false;
+      }
+      // API error - fall through to regular download
+      console.warn('File System Access API error, falling back to download:', err);
+    }
+  }
+  
+  // Fallback: Create download link
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = suggestedName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  
+  return true;
+}
 
 /**
  * Export MP4 along the recorded camera path
@@ -13,7 +74,7 @@ import { interpolateCameraPath } from './pathInterpolation';
  * @param {Array} params.keyframes - Recorded camera keyframes
  * @param {Function} params.setExportProgress - Progress state setter
  * @param {Function} params.setIsExporting - Exporting state setter
- * @param {number} params.duration - Export duration in milliseconds (default 5000)
+ * @param {number} params.duration - Export duration in milliseconds (1000-30000, default 5000)
  * @param {number} params.fps - Frames per second (default 30)
  * @param {number} params.width - Export width (default 1280)
  * @param {number} params.height - Export height (default 720)
@@ -38,14 +99,9 @@ export async function startPathExport({
     return;
   }
   
-  const confirmExport = window.confirm(
-    `Export MP4 along camera path?\n\n` +
-    `• ${keyframes.length} keyframes\n` +
-    `• ${(duration / 1000).toFixed(1)}s duration\n` +
-    `• ${width}×${height} @ ${fps}fps`
-  );
-  if (!confirmExport) return;
-
+  // Validate and clamp duration
+  const validatedDuration = validateDuration(duration);
+  
   setIsExporting(true);
   setExportProgress(0);
 
@@ -53,10 +109,29 @@ export async function startPathExport({
   const controlsWereEnabled = controlsRef.current?.enabled ?? true;
   if (controlsRef.current) controlsRef.current.enabled = false;
 
-  // Store original renderer size
-  const originalWidth = rendererRef.current.domElement.width;
-  const originalHeight = rendererRef.current.domElement.height;
-  const originalAspect = cameraRef.current.aspect;
+  // Store original renderer size (use window dimensions, not canvas pixel dimensions)
+  // Canvas.width includes pixel ratio, but setSize expects CSS dimensions
+  const originalWidth = window.innerWidth;
+  const originalHeight = window.innerHeight;
+  
+  
+  // Save complete camera state to restore after export
+  // This prevents export from mutating the camera's transform
+  const savedCameraState = {
+    position: cameraRef.current.position.clone(),
+    quaternion: cameraRef.current.quaternion.clone(),
+    fov: cameraRef.current.fov,
+    aspect: cameraRef.current.aspect,
+    matrix: cameraRef.current.matrix.clone(),
+    matrixWorld: cameraRef.current.matrixWorld.clone()
+  };
+  
+  // Also save orbit controls target - this is critical for proper restoration
+  const savedControlsTarget = controlsRef.current?.target?.clone();
+
+  // Generate filename with timestamp
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const filename = `camera_path_${timestamp}.mp4`;
 
   try {
     // Resize renderer for export resolution
@@ -68,22 +143,24 @@ export async function startPathExport({
     const startRes = await fetch('http://localhost:5000/start-export', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fps, filename: `camera_path_${Date.now()}.mp4` })
+      body: JSON.stringify({ fps, filename })
     });
     
     if (!startRes.ok) throw new Error('Failed to start export server session');
 
-    // Calculate total frames
-    const totalFrames = Math.ceil((duration / 1000) * fps);
+    // Calculate total frames based on validated duration
+    const totalFrames = Math.ceil((validatedDuration / 1000) * fps);
     
-    // Stop main animation loop during export
-    if (requestRef.current) cancelAnimationFrame(requestRef.current);
+    // Note: We intentionally do NOT stop the main animation loop during export.
+    // The main animation loop in useThreeSetup contains walk mode WASD processing.
+    // If we cancel and restart with a simplified loop, walk mode breaks after export.
+    // The main loop continues but we manually control rendering for each export frame.
 
-    console.log(`Exporting ${totalFrames} frames along camera path...`);
+    console.log(`Exporting ${totalFrames} frames (${(validatedDuration / 1000).toFixed(1)}s) along camera path...`);
 
     // Render each frame along the path
     for (let i = 0; i < totalFrames; i++) {
-      // Calculate normalized time (0 to 1) with smoothstep easing
+      // Calculate normalized time (0 to 1)
       const t = i / (totalFrames - 1);
       
       // Get interpolated camera state (with easing for cinematic motion)
@@ -125,11 +202,30 @@ export async function startPathExport({
       await new Promise(r => setTimeout(r, 5));
     }
     
-    // Finalize video
+    // Finalize video on server
     console.log('Finalizing video...');
-    await fetch('http://localhost:5000/finalize-video', { method: 'POST' });
+    const finalizeRes = await fetch('http://localhost:5000/finalize-video', { method: 'POST' });
+    const finalizeData = await finalizeRes.json();
     
-    alert('Export Complete! Video saved to project folder.');
+    // Give server a moment to finish writing the file
+    await new Promise(r => setTimeout(r, 500));
+    
+    // Download the video file
+    console.log('Downloading video for save...');
+    const downloadRes = await fetch('http://localhost:5000/download-video');
+    
+    if (!downloadRes.ok) {
+      throw new Error('Failed to download video from server');
+    }
+    
+    const videoBlob = await downloadRes.blob();
+    
+    // Prompt user to save the file
+    const saved = await promptSaveFile(videoBlob, filename);
+    
+    if (saved) {
+      alert(`Export Complete! Video saved (${(videoBlob.size / (1024 * 1024)).toFixed(2)} MB)`);
+    }
 
   } catch (err) {
     console.error('Export failed:', err);
@@ -137,24 +233,43 @@ export async function startPathExport({
   } finally {
     // Restore original renderer size
     rendererRef.current.setSize(originalWidth, originalHeight);
-    cameraRef.current.aspect = originalAspect;
+    
+    // Restore complete camera state to undo any export mutations
+    cameraRef.current.position.copy(savedCameraState.position);
+    cameraRef.current.quaternion.copy(savedCameraState.quaternion);
+    cameraRef.current.fov = savedCameraState.fov;
+    cameraRef.current.aspect = savedCameraState.aspect;
     cameraRef.current.updateProjectionMatrix();
     
-    // Restore controls
-    if (controlsRef.current) controlsRef.current.enabled = controlsWereEnabled;
+    // Decompose the saved matrix to get exact rotation (more reliable than quaternion copy)
+    cameraRef.current.matrix.copy(savedCameraState.matrix);
+    cameraRef.current.matrix.decompose(
+      cameraRef.current.position,
+      cameraRef.current.quaternion,
+      cameraRef.current.scale
+    );
+    cameraRef.current.updateMatrixWorld(true);
+    
+    // Restore controls with saved target position
+    if (controlsRef.current) {
+      // Restore the saved target position BEFORE enabling controls
+      if (savedControlsTarget) {
+        controlsRef.current.target.copy(savedControlsTarget);
+      }
+      
+      // DON'T call update() here - it can recompute camera orientation
+      // The next animation frame will call update() naturally
+      
+      controlsRef.current.enabled = controlsWereEnabled;
+    }
     
     setIsExporting(false);
     
-    // Restart animation loop
-    const animate = () => {
-      requestRef.current = requestAnimationFrame(animate);
-      if (controlsRef.current?.enabled) controlsRef.current.update();
-      if (viewerRef.current) {
-        viewerRef.current.update();
-        viewerRef.current.render();
-      }
-    };
-    animate();
+    // Note: We don't restart the animation loop here.
+    // The main animation loop from useThreeSetup continues running and will
+    // resume normal operation once controls are re-enabled.
+    // This fixes the bug where walk mode movement stopped working because
+    // a new simplified animation loop was replacing the original.
   }
 }
 

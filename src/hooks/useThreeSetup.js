@@ -145,7 +145,7 @@ export function useThreeSetup(containerRef, { setFps, setSplatCount }) {
       cameraRef.current.aspect = width / height;
       cameraRef.current.updateProjectionMatrix();
       rendererRef.current.setSize(width, height);
-      viewerRef.current.updateView();
+      // Note: The animation loop's update() and render() calls will handle the new size
     };
     window.addEventListener('resize', handleResize);
 
