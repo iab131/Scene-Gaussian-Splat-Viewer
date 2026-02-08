@@ -36,3 +36,10 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
+
+# video exports (should go to temp dir, but just in case)
+*.mp4
+
+# scene files (large binaries)
+*.ply
+*.splat

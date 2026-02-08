@@ -6,6 +6,7 @@ import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import { PassThrough } from 'stream';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 
 // Set ffmpeg path
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
@@ -34,8 +35,9 @@ app.post('/start-export', (req, res) => {
 
     const { fps = 30, filename = 'output.mp4' } = req.body;
     
-    // Store the output path
-    currentOutputPath = path.resolve(process.cwd(), filename);
+    // Store the output path in OS temp directory (not project folder)
+    const tempDir = os.tmpdir();
+    currentOutputPath = path.join(tempDir, filename);
     
     console.log(`Starting export: ${filename} at ${fps} fps`);
     console.log(`Output path: ${currentOutputPath}`);
@@ -169,6 +171,7 @@ app.post('/finalize-video', async (req, res) => {
 });
 
 // Download endpoint - serves the video file for browser download
+// IMPORTANT: Deletes temp file after download - only user's saved copy persists
 app.get('/download-video', (req, res) => {
     console.log('Download request received');
     console.log('Current output path:', currentOutputPath);
@@ -185,7 +188,8 @@ app.get('/download-video', (req, res) => {
     }
 
     const filename = path.basename(currentOutputPath);
-    const stat = fs.statSync(currentOutputPath);
+    const tempFilePath = currentOutputPath; // Store for deletion
+    const stat = fs.statSync(tempFilePath);
     
     console.log(`Serving file: ${filename} (${(stat.size / (1024 * 1024)).toFixed(2)} MB)`);
 
@@ -193,7 +197,22 @@ app.get('/download-video', (req, res) => {
     res.setHeader('Content-Length', stat.size);
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
 
-    const readStream = fs.createReadStream(currentOutputPath);
+    const readStream = fs.createReadStream(tempFilePath);
+    
+    // Delete temp file after stream finishes (user will save via file picker)
+    readStream.on('close', () => {
+        if (fs.existsSync(tempFilePath)) {
+            try {
+                fs.unlinkSync(tempFilePath);
+                console.log('Temp file deleted after download:', tempFilePath);
+            } catch (e) {
+                console.warn('Could not delete temp file:', e.message);
+            }
+        }
+        // Reset path since file is gone
+        currentOutputPath = null;
+    });
+    
     readStream.pipe(res);
 });
 
@@ -310,6 +329,52 @@ process.on('unhandledRejection', (reason, promise) => {
     console.error('Unhandled rejection (server continues):', reason);
 });
 
-app.listen(port, () => {
+// Create HTTP server with reference for graceful shutdown
+const server = app.listen(port, () => {
     console.log(`Export server running at http://localhost:${port}`);
+    console.log(`Temp directory: ${os.tmpdir()}`);
 });
+
+// Graceful shutdown handling
+function gracefulShutdown(signal) {
+    console.log(`\n${signal} received. Shutting down gracefully...`);
+    
+    // Clean up any active export
+    if (videoStream) {
+        try {
+            videoStream.destroy();
+        } catch (e) {}
+        videoStream = null;
+    }
+    
+    if (ffmpegCommand) {
+        try {
+            ffmpegCommand.kill('SIGTERM');
+        } catch (e) {}
+        ffmpegCommand = null;
+    }
+    
+    // Clean up temp file if exists
+    if (currentOutputPath && fs.existsSync(currentOutputPath)) {
+        try {
+            fs.unlinkSync(currentOutputPath);
+            console.log('Cleaned up temp file:', currentOutputPath);
+        } catch (e) {}
+    }
+    
+    // Close server
+    server.close(() => {
+        console.log('Server closed');
+        process.exit(0);
+    });
+    
+    // Force exit after 3 seconds if server doesn't close
+    setTimeout(() => {
+        console.log('Forcing exit...');
+        process.exit(0);
+    }, 3000);
+}
+
+// Listen for shutdown signals
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));   // Ctrl+C
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM')); // kill command
