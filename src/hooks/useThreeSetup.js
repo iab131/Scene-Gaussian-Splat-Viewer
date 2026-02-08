@@ -135,6 +135,15 @@ export function useThreeSetup(containerRef, { setFps, setSplatCount }) {
         viewerRef.current.update();
         viewerRef.current.render();
       }
+
+      // Secondary render pass for scene objects (gizmos, helpers)
+      // Gizmos have depthTest: false so they render on top
+      if (sceneRef.current && cameraRef.current) {
+        renderer.autoClear = false;
+        renderer.clearDepth();
+        renderer.render(sceneRef.current, cameraRef.current);
+        renderer.autoClear = true;
+      }
     };
     animate();
 

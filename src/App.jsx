@@ -5,6 +5,7 @@ import { useThreeSetup } from './hooks/useThreeSetup';
 import { useWalkControls } from './hooks/useWalkControls';
 import { useFileLoader } from './hooks/useFileLoader';
 import { useCameraPath } from './hooks/useCameraPath';
+import { useFrustumGizmos } from './hooks/useFrustumGizmos';
 
 // Components
 import { StatsPanel } from './components/StatsPanel';
@@ -34,6 +35,9 @@ export default function App() {
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
   const [showExportDialog, setShowExportDialog] = useState(false);
+
+  // Active keyframe for frustum gizmo highlighting (during scrubbing)
+  const [activeKeyframeIndex, setActiveKeyframeIndex] = useState(-1);
 
   // Three.js setup
   const {
@@ -95,6 +99,34 @@ export default function App() {
 
   // Keep clearKeyframesRef in sync
   clearKeyframesRef.current = clearKeyframes;
+
+  // Frustum gizmos for visualizing keyframe camera poses
+  // Hide during playback only, stay visible during scrubbing
+  const { getClosestKeyframeIndex } = useFrustumGizmos({
+    sceneRef,
+    keyframes,
+    activeKeyframeIndex: -1,
+    enabled: hasScene && keyframeCount > 0 && !isExporting && !isPlaying
+  });
+
+  // Wrapped seek handler that also updates the active keyframe highlight
+  const handleSeek = useCallback((t) => {
+    seekTo(t);
+    // Highlight the closest keyframe during scrubbing
+    const closestIndex = getClosestKeyframeIndex(t);
+    setActiveKeyframeIndex(closestIndex);
+  }, [seekTo, getClosestKeyframeIndex]);
+
+  // Reset active keyframe when playback starts or stops
+  const handlePlayPath = useCallback((duration) => {
+    setActiveKeyframeIndex(-1);
+    playPath(duration);
+  }, [playPath]);
+
+  const handleStopPlayback = useCallback(() => {
+    setActiveKeyframeIndex(-1);
+    stopPlayback();
+  }, [stopPlayback]);
 
   // Camera actions
   const handleResetView = useCallback(() => {
@@ -192,9 +224,9 @@ export default function App() {
           onDeleteKeyframe={removeKeyframe}
           onReorderKeyframes={reorderKeyframes}
           onClearKeyframes={clearKeyframes}
-          onPlayPath={playPath}
-          onStopPlayback={stopPlayback}
-          onSeek={seekTo}
+          onPlayPath={handlePlayPath}
+          onStopPlayback={handleStopPlayback}
+          onSeek={handleSeek}
           disabled={isExporting}
         />
       )}
