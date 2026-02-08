@@ -62,14 +62,51 @@ async function promptSaveFile(blob, suggestedName) {
 }
 
 /**
- * Export MP4 along the recorded camera path
- * Uses the same interpolation as Preview Play for deterministic results
+ * Convert pixel data to JPEG data URL
+ * @param {Uint8Array} pixels - RGBA pixel data
+ * @param {number} width - Image width
+ * @param {number} height - Image height
+ * @returns {string} JPEG data URL
+ */
+function pixelsToDataUrl(pixels, width, height) {
+  // Create canvas for conversion
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  
+  // WebGL renders upside down, so we need to flip vertically
+  const imageData = ctx.createImageData(width, height);
+  
+  // Flip Y and copy pixels
+  for (let y = 0; y < height; y++) {
+    const srcRow = (height - 1 - y) * width * 4;
+    const dstRow = y * width * 4;
+    for (let x = 0; x < width * 4; x++) {
+      imageData.data[dstRow + x] = pixels[srcRow + x];
+    }
+  }
+  
+  ctx.putImageData(imageData, 0, 0);
+  return canvas.toDataURL('image/jpeg', 0.95);
+}
+
+/**
+ * Export MP4 along the recorded camera path using OFFSCREEN rendering
+ * 
+ * Strategy:
+ * - Uses WebGLRenderTarget to render at fixed resolution
+ * - Temporarily moves main camera to export position for each frame (viewer uses main camera)
+ * - Immediately restores camera after render
+ * - Main canvas is NOT resized - offscreen target handles resolution
+ * - Main canvas continues normal rendering between frames
  * 
  * @param {Object} params - Export parameters
  * @param {React.RefObject} params.cameraRef - Camera reference
  * @param {React.RefObject} params.controlsRef - Controls reference
  * @param {React.RefObject} params.rendererRef - Renderer reference
  * @param {React.RefObject} params.viewerRef - Viewer reference
+ * @param {React.RefObject} params.sceneRef - Scene reference
  * @param {React.RefObject} params.requestRef - Animation frame request reference
  * @param {Array} params.keyframes - Recorded camera keyframes
  * @param {Function} params.setExportProgress - Progress state setter
@@ -86,6 +123,7 @@ export async function startPathExport({
   controlsRef,
   rendererRef,
   viewerRef,
+  sceneRef,
   requestRef,
   keyframes,
   setExportProgress,
@@ -115,39 +153,47 @@ export async function startPathExport({
   const controlsWereEnabled = controlsRef.current?.enabled ?? true;
   if (controlsRef.current) controlsRef.current.enabled = false;
 
-  // Store original renderer size (use window dimensions, not canvas pixel dimensions)
-  // Canvas.width includes pixel ratio, but setSize expects CSS dimensions
-  const originalWidth = window.innerWidth;
-  const originalHeight = window.innerHeight;
-  
-  
-  // Save complete camera state to restore after export
-  // This prevents export from mutating the camera's transform
-  const savedCameraState = {
-    position: cameraRef.current.position.clone(),
-    quaternion: cameraRef.current.quaternion.clone(),
-    fov: cameraRef.current.fov,
-    aspect: cameraRef.current.aspect,
-    matrix: cameraRef.current.matrix.clone(),
-    matrixWorld: cameraRef.current.matrixWorld.clone()
-  };
-  
-  // Also save orbit controls target - this is critical for proper restoration
-  const savedControlsTarget = controlsRef.current?.target?.clone();
-
   // Generate filename with timestamp
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-  const filename = `camera_path_${timestamp}.mp4`;
+  const filename = `camera_render_${timestamp}.mp4`;
+
+  const renderer = rendererRef.current;
+  const camera = cameraRef.current;
+  
+  // === SAVE ORIGINAL CAMERA STATE ===
+  // This is restored after ALL frames are done
+  const savedCameraState = {
+    position: camera.position.clone(),
+    quaternion: camera.quaternion.clone(),
+    fov: camera.fov,
+    aspect: camera.aspect
+  };
+  
+  // Save controls target
+  const savedControlsTarget = controlsRef.current?.target?.clone();
+  
+  // === OFFSCREEN RENDERING SETUP ===
+  // Create a WebGLRenderTarget for offscreen rendering at export resolution
+  const renderTarget = new THREE.WebGLRenderTarget(width, height, {
+    minFilter: THREE.LinearFilter,
+    magFilter: THREE.LinearFilter,
+    format: THREE.RGBAFormat,
+    type: THREE.UnsignedByteType,
+    depthBuffer: true,
+    stencilBuffer: false
+  });
+  
+  // Buffer to read pixels from render target
+  const pixelBuffer = new Uint8Array(width * height * 4);
+  
+  // Set camera aspect for export resolution
+  camera.aspect = width / height;
+  camera.updateProjectionMatrix();
 
   let wasCancelled = false;
   let exportSuccess = false;
 
   try {
-    // Resize renderer for export resolution
-    rendererRef.current.setSize(width, height);
-    cameraRef.current.aspect = width / height;
-    cameraRef.current.updateProjectionMatrix();
-
     // Start server export session
     const startRes = await fetch('http://localhost:5000/start-export', {
       method: 'POST',
@@ -159,13 +205,8 @@ export async function startPathExport({
 
     // Calculate total frames based on validated duration
     const totalFrames = Math.ceil((validatedDuration / 1000) * fps);
-    
-    // Note: We intentionally do NOT stop the main animation loop during export.
-    // The main animation loop in useThreeSetup contains walk mode WASD processing.
-    // If we cancel and restart with a simplified loop, walk mode breaks after export.
-    // The main loop continues but we manually control rendering for each export frame.
 
-    console.log(`Exporting ${totalFrames} frames (${(validatedDuration / 1000).toFixed(1)}s) along camera path...`);
+    console.log(`Exporting ${totalFrames} frames (${(validatedDuration / 1000).toFixed(1)}s) using offscreen rendering at ${width}x${height}...`);
 
     // Render each frame along the path
     for (let i = 0; i < totalFrames; i++) {
@@ -182,23 +223,37 @@ export async function startPathExport({
       // Get interpolated camera state (with easing for cinematic motion)
       const state = interpolateCameraPath(keyframes, t, true);
 
-      // Apply state to camera (same as playback)
-      cameraRef.current.position.copy(state.position);
-      cameraRef.current.quaternion.copy(state.quaternion);
+      // === APPLY EXPORT CAMERA STATE ===
+      // Temporarily move the main camera to the export position
+      // (Viewer uses main camera internally)
+      camera.position.copy(state.position);
+      camera.quaternion.copy(state.quaternion);
       
-      if (cameraRef.current.fov !== state.fov) {
-        cameraRef.current.fov = state.fov;
-        cameraRef.current.updateProjectionMatrix();
+      if (camera.fov !== state.fov) {
+        camera.fov = state.fov;
+        camera.updateProjectionMatrix();
       }
       
-      cameraRef.current.updateMatrixWorld(true);
+      camera.updateMatrixWorld(true);
       
-      // Render the frame
+      // === OFFSCREEN RENDER ===
+      // Set render target to our offscreen buffer
+      renderer.setRenderTarget(renderTarget);
+      renderer.clear();
+      
+      // Update and render the splat viewer to the offscreen target
+      // The viewer uses the main camera (which we've moved to export position)
       viewerRef.current.update();
       viewerRef.current.render();
       
-      // Capture frame as JPEG
-      const dataUrl = rendererRef.current.domElement.toDataURL('image/jpeg', 0.95);
+      // Read pixels from render target
+      renderer.readRenderTargetPixels(renderTarget, 0, 0, width, height, pixelBuffer);
+      
+      // Reset render target to screen immediately
+      renderer.setRenderTarget(null);
+      
+      // Convert pixels to JPEG data URL
+      const dataUrl = pixelsToDataUrl(pixelBuffer, width, height);
       
       // Send frame to server
       const frameRes = await fetch('http://localhost:5000/export-frame', {
@@ -214,7 +269,7 @@ export async function startPathExport({
       // Update progress
       setExportProgress(((i + 1) / totalFrames) * 100);
       
-      // Small delay to prevent blocking
+      // Small delay to prevent blocking and allow UI updates
       await new Promise(r => setTimeout(r, 5));
     }
     
@@ -261,46 +316,33 @@ export async function startPathExport({
       alert('Export failed: ' + err.message);
     }
   } finally {
-    // Restore original renderer size
-    rendererRef.current.setSize(originalWidth, originalHeight);
+    // === CLEANUP ===
+    // Dispose render target
+    renderTarget.dispose();
     
-    // Restore complete camera state to undo any export mutations
-    cameraRef.current.position.copy(savedCameraState.position);
-    cameraRef.current.quaternion.copy(savedCameraState.quaternion);
-    cameraRef.current.fov = savedCameraState.fov;
-    cameraRef.current.aspect = savedCameraState.aspect;
-    cameraRef.current.updateProjectionMatrix();
+    // Reset render target to screen (safety)
+    renderer.setRenderTarget(null);
     
-    // Decompose the saved matrix to get exact rotation (more reliable than quaternion copy)
-    cameraRef.current.matrix.copy(savedCameraState.matrix);
-    cameraRef.current.matrix.decompose(
-      cameraRef.current.position,
-      cameraRef.current.quaternion,
-      cameraRef.current.scale
-    );
-    cameraRef.current.updateMatrixWorld(true);
+    // === RESTORE CAMERA STATE ===
+    camera.position.copy(savedCameraState.position);
+    camera.quaternion.copy(savedCameraState.quaternion);
+    camera.fov = savedCameraState.fov;
+    camera.aspect = savedCameraState.aspect;
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld(true);
     
-    // Restore controls with saved target position
+    // Restore controls
     if (controlsRef.current) {
-      // Restore the saved target position BEFORE enabling controls
       if (savedControlsTarget) {
         controlsRef.current.target.copy(savedControlsTarget);
       }
-      
-      // DON'T call update() here - it can recompute camera orientation
-      // The next animation frame will call update() naturally
-      
       controlsRef.current.enabled = controlsWereEnabled;
     }
     
     setIsExporting(false);
     setExportProgress(0);
     
-    // Note: We don't restart the animation loop here.
-    // The main animation loop from useThreeSetup continues running and will
-    // resume normal operation once controls are re-enabled.
-    // This fixes the bug where walk mode movement stopped working because
-    // a new simplified animation loop was replacing the original.
+    console.log('Offscreen export cleanup complete');
   }
   
   return { success: exportSuccess, cancelled: wasCancelled };

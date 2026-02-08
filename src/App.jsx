@@ -164,6 +164,7 @@ export default function App() {
       controlsRef,
       rendererRef,
       viewerRef,
+      sceneRef,
       requestRef,
       keyframes,
       setExportProgress,
@@ -179,7 +180,7 @@ export default function App() {
     if (result?.cancelled) {
       console.log('Export was cancelled by user');
     }
-  }, [keyframes, cameraRef, controlsRef, rendererRef, viewerRef, requestRef]);
+  }, [keyframes, cameraRef, controlsRef, rendererRef, viewerRef, sceneRef, requestRef]);
 
   // Cancel export handler
   const handleCancelExport = useCallback(() => {
