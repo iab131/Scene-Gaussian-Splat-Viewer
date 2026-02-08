@@ -23,8 +23,9 @@ let videoStream = null;
 let ffmpegCommand = null;
 let isRecording = false;
 let frameCount = 0;
-let currentOutputPath = null;  // Track the output file path
-let ffmpegFinished = null;     // Promise that resolves when FFmpeg finishes
+let currentOutputPath = null;
+let ffmpegFinished = null;
+let isCancelling = false;  // Flag to suppress error handling during cancel
 
 app.post('/start-export', (req, res) => {
     if (isRecording) {
@@ -39,6 +40,7 @@ app.post('/start-export', (req, res) => {
     console.log(`Starting export: ${filename} at ${fps} fps`);
     console.log(`Output path: ${currentOutputPath}`);
     isRecording = true;
+    isCancelling = false;
     frameCount = 0;
 
     // Create a PassThrough stream to pipe data to ffmpeg
@@ -65,15 +67,19 @@ app.post('/start-export', (req, res) => {
                 console.log('FFmpeg progress:', progress.frames, 'frames');
             })
             .on('error', (err) => {
-                console.error('FFmpeg error:', err);
+                // Don't log error if we're cancelling - it's expected
+                if (!isCancelling) {
+                    console.error('FFmpeg error:', err.message);
+                }
                 isRecording = false;
-                reject(err);
+                // Resolve instead of reject to prevent unhandled rejection
+                resolve({ error: true, cancelled: isCancelling });
             })
             .on('end', () => {
                 console.log('FFmpeg processing finished');
                 console.log(`Video saved to: ${currentOutputPath}`);
                 isRecording = false;
-                resolve();
+                resolve({ error: false, cancelled: false });
             });
 
         ffmpegCommand.run();
@@ -132,7 +138,13 @@ app.post('/finalize-video', async (req, res) => {
     try {
         // Wait for FFmpeg to actually finish encoding
         console.log('Waiting for FFmpeg to complete...');
-        await ffmpegFinished;
+        const result = await ffmpegFinished;
+        
+        if (result?.error && !result?.cancelled) {
+            console.error('FFmpeg failed during finalization');
+            return res.status(500).json({ error: 'Video encoding failed' });
+        }
+        
         console.log('FFmpeg completed successfully');
         
         // Verify file exists and get size
@@ -200,8 +212,104 @@ app.get('/video-info', (req, res) => {
     });
 });
 
+// Cancel export - kills FFmpeg and cleans up partial files
+app.post('/cancel-export', async (req, res) => {
+    console.log('Cancel export requested');
+    
+    if (!isRecording && !videoStream && !ffmpegCommand) {
+        return res.json({ message: 'No export in progress' });
+    }
+    
+    // Set cancelling flag to suppress error handling
+    isCancelling = true;
+    const receivedFrames = frameCount;
+    
+    try {
+        // End the stream gracefully first
+        if (videoStream) {
+            try {
+                videoStream.destroy();
+            } catch (e) {
+                // Ignore stream errors
+            }
+            videoStream = null;
+        }
+        
+        // Kill FFmpeg process if running
+        if (ffmpegCommand) {
+            console.log('Killing FFmpeg process...');
+            try {
+                ffmpegCommand.kill('SIGTERM'); // Use SIGTERM for graceful shutdown
+            } catch (e) {
+                // FFmpeg might already be dead, that's fine
+            }
+            ffmpegCommand = null;
+        }
+        
+        // Wait a moment for FFmpeg to actually die
+        await new Promise(r => setTimeout(r, 200));
+        
+        // Clean up partial output file
+        if (currentOutputPath && fs.existsSync(currentOutputPath)) {
+            console.log('Removing partial file:', currentOutputPath);
+            try {
+                fs.unlinkSync(currentOutputPath);
+                console.log('Partial file removed');
+            } catch (e) {
+                console.warn('Could not remove partial file:', e.message);
+            }
+        }
+        
+        // Reset state
+        isRecording = false;
+        frameCount = 0;
+        ffmpegFinished = null;
+        
+        console.log('Export cancelled and cleaned up');
+        res.json({ message: 'Export cancelled', framesReceived: receivedFrames });
+        
+    } catch (err) {
+        console.error('Error during cancel:', err);
+        // Reset state anyway
+        isRecording = false;
+        videoStream = null;
+        ffmpegCommand = null;
+        ffmpegFinished = null;
+        
+        res.json({ message: 'Export cancelled with errors', error: err.message });
+    } finally {
+        // Reset cancelling flag after a delay
+        setTimeout(() => {
+            isCancelling = false;
+        }, 500);
+    }
+});
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+    res.json({ 
+        status: 'ok', 
+        isRecording, 
+        frameCount,
+        hasOutputPath: !!currentOutputPath
+    });
+});
+
+// Global error handler to prevent server crashes
+app.use((err, req, res, next) => {
+    console.error('Express error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+});
+
+// Handle uncaught exceptions to keep server running
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught exception (server continues):', err.message);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled rejection (server continues):', reason);
+});
+
 app.listen(port, () => {
     console.log(`Export server running at http://localhost:${port}`);
 });
-
-

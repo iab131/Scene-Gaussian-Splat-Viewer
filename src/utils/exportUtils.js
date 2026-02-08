@@ -74,10 +74,12 @@ async function promptSaveFile(blob, suggestedName) {
  * @param {Array} params.keyframes - Recorded camera keyframes
  * @param {Function} params.setExportProgress - Progress state setter
  * @param {Function} params.setIsExporting - Exporting state setter
+ * @param {React.RefObject} params.cancelRef - Cancel signal ref (set .current = true to cancel)
  * @param {number} params.duration - Export duration in milliseconds (1000-30000, default 5000)
  * @param {number} params.fps - Frames per second (default 30)
  * @param {number} params.width - Export width (default 1280)
  * @param {number} params.height - Export height (default 720)
+ * @returns {Promise<{success: boolean, cancelled: boolean}>} Export result
  */
 export async function startPathExport({
   cameraRef,
@@ -88,16 +90,20 @@ export async function startPathExport({
   keyframes,
   setExportProgress,
   setIsExporting,
+  cancelRef,
   duration = 5000,
   fps = 30,
   width = 1280,
   height = 720
 }) {
-  if (!rendererRef.current || !viewerRef.current) return;
+  if (!rendererRef.current || !viewerRef.current) return { success: false, cancelled: false };
   if (!keyframes || keyframes.length < 2) {
     alert('Need at least 2 keyframes to export');
-    return;
+    return { success: false, cancelled: false };
   }
+  
+  // Reset cancel signal
+  if (cancelRef) cancelRef.current = false;
   
   // Validate and clamp duration
   const validatedDuration = validateDuration(duration);
@@ -133,6 +139,9 @@ export async function startPathExport({
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const filename = `camera_path_${timestamp}.mp4`;
 
+  let wasCancelled = false;
+  let exportSuccess = false;
+
   try {
     // Resize renderer for export resolution
     rendererRef.current.setSize(width, height);
@@ -160,6 +169,13 @@ export async function startPathExport({
 
     // Render each frame along the path
     for (let i = 0; i < totalFrames; i++) {
+      // Check for cancellation
+      if (cancelRef?.current) {
+        console.log('Export cancelled by user at frame', i);
+        wasCancelled = true;
+        break;
+      }
+      
       // Calculate normalized time (0 to 1)
       const t = i / (totalFrames - 1);
       
@@ -202,6 +218,17 @@ export async function startPathExport({
       await new Promise(r => setTimeout(r, 5));
     }
     
+    // If cancelled, tell server to abort
+    if (wasCancelled) {
+      console.log('Sending cancel request to server...');
+      try {
+        await fetch('http://localhost:5000/cancel-export', { method: 'POST' });
+      } catch (e) {
+        console.warn('Failed to send cancel to server:', e);
+      }
+      return { success: false, cancelled: true };
+    }
+    
     // Finalize video on server
     console.log('Finalizing video...');
     const finalizeRes = await fetch('http://localhost:5000/finalize-video', { method: 'POST' });
@@ -225,11 +252,14 @@ export async function startPathExport({
     
     if (saved) {
       alert(`Export Complete! Video saved (${(videoBlob.size / (1024 * 1024)).toFixed(2)} MB)`);
+      exportSuccess = true;
     }
 
   } catch (err) {
     console.error('Export failed:', err);
-    alert('Export failed: ' + err.message);
+    if (!wasCancelled) {
+      alert('Export failed: ' + err.message);
+    }
   } finally {
     // Restore original renderer size
     rendererRef.current.setSize(originalWidth, originalHeight);
@@ -264,6 +294,7 @@ export async function startPathExport({
     }
     
     setIsExporting(false);
+    setExportProgress(0);
     
     // Note: We don't restart the animation loop here.
     // The main animation loop from useThreeSetup continues running and will
@@ -271,6 +302,8 @@ export async function startPathExport({
     // This fixes the bug where walk mode movement stopped working because
     // a new simplified animation loop was replacing the original.
   }
+  
+  return { success: exportSuccess, cancelled: wasCancelled };
 }
 
 /**

@@ -26,6 +26,7 @@ export default function App() {
   const containerRef = useRef(null);
   const fileInputRef = useRef(null);
   const clearKeyframesRef = useRef(() => {});
+  const cancelExportRef = useRef(false); // Signal to cancel export
 
   // Stats state
   const [fps, setFps] = useState(0);
@@ -156,8 +157,9 @@ export default function App() {
   // Export action - called from dialog with duration in seconds
   const handleExport = useCallback(async (durationSeconds) => {
     setShowExportDialog(false);
+    cancelExportRef.current = false; // Reset cancel signal
     
-    await startPathExport({
+    const result = await startPathExport({
       cameraRef,
       controlsRef,
       rendererRef,
@@ -166,12 +168,26 @@ export default function App() {
       keyframes,
       setExportProgress,
       setIsExporting,
+      cancelRef: cancelExportRef,
       duration: durationSeconds * 1000,  // Convert to milliseconds
       fps: 30,
       width: 1280,
       height: 720
     });
+    
+    // Handle cancellation feedback
+    if (result?.cancelled) {
+      console.log('Export was cancelled by user');
+    }
   }, [keyframes, cameraRef, controlsRef, rendererRef, viewerRef, requestRef]);
+
+  // Cancel export handler
+  const handleCancelExport = useCallback(() => {
+    if (isExporting) {
+      console.log('User requested export cancellation');
+      cancelExportRef.current = true;
+    }
+  }, [isExporting]);
 
   // File selection
   const handleSelectFile = useCallback(() => {
@@ -209,6 +225,7 @@ export default function App() {
         isExporting={isExporting}
         progress={progress}
         exportProgress={exportProgress}
+        onCancelExport={handleCancelExport}
       />
 
       {/* UI Panels */}

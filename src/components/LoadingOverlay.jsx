@@ -1,9 +1,15 @@
 import React from 'react';
 
 /**
- * Loading overlay with progress bar
+ * Loading overlay with progress bar and cancel button for exports
  */
-export function LoadingOverlay({ isLoading, isExporting, progress, exportProgress }) {
+export function LoadingOverlay({ 
+  isLoading, 
+  isExporting, 
+  progress, 
+  exportProgress,
+  onCancelExport 
+}) {
   if (!isLoading && !isExporting) return null;
 
   const displayProgress = isExporting ? exportProgress : progress;
@@ -23,6 +29,16 @@ export function LoadingOverlay({ isLoading, isExporting, progress, exportProgres
       <div className="mt-2 text-sm text-cyan-200">
         {Math.round(displayProgress)}%
       </div>
+      
+      {/* Cancel button - only show during export */}
+      {isExporting && onCancelExport && (
+        <button
+          onClick={onCancelExport}
+          className="mt-4 px-6 py-2 text-sm font-medium bg-red-600/80 hover:bg-red-500 text-white rounded-lg transition-all hover:shadow-[0_0_15px_rgba(239,68,68,0.4)] active:scale-95"
+        >
+          Cancel Export
+        </button>
+      )}
     </div>
   );
 }
