@@ -2,6 +2,8 @@
 
 A web-based Gaussian Splat viewer with camera path recording and MP4 video export.
 
+[Demo Video](https://youtu.be/EPXJpeUkBSA) · [Design Notes](https://docs.google.com/document/d/1GqOC-KRD-gLKe2yLE4LjlUDY6eg_-U8Q49oFyJRiXCg/edit?usp=sharing)
+
 ## Quick Start
 
 ```bash
@@ -46,7 +48,7 @@ This starts both the frontend viewer (`localhost:5173`) and export server (`loca
 
 ## Tech Stack
 
-React 19 · Vite · Three.js · Tailwind CSS · Node.js · FFmpeg
+React 19 · Vite · Three.js · [GaussianSplats3D](https://github.com/mkkellogg/GaussianSplats3D) · Tailwind CSS · Node.js · FFmpeg
 
 ---
 

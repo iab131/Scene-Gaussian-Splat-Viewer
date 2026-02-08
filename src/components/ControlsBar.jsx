@@ -40,7 +40,7 @@ export function ControlsBar({
             : 'bg-violet-600 hover:bg-violet-500 text-white hover:shadow-[0_0_20px_rgba(139,92,246,0.5)]'
         } disabled:opacity-50 disabled:cursor-not-allowed`}
       >
-        <span>{cameraMode === 'orbit' ? '🚶 Walk Mode' : '🌍 Orbit Mode'}</span>
+        <span>{cameraMode === 'orbit' ? 'Walk Mode' : 'Orbit Mode'}</span>
       </button>
       
       <div className="w-px h-8 bg-slate-700 mx-2 self-center"></div>
