@@ -23,26 +23,25 @@ The application solves the problem of creating smooth, reproducible camera flyth
 - **Camera Path Recording** — Add keyframes at any camera position to define an animation path
 - **MP4 Video Export** — Render the camera path to a video file using server-side FFmpeg encoding
 
-### Extra Implementations
+---
 
-#### Timeline Editor
-- **Draggable keyframe list** — Reorder keyframes via drag-and-drop
-- **Timeline scrubber** — Drag to preview any point along the camera path
-- **Duration control** — Adjustable export duration from 1 to 30 seconds
-- **Camera frustum gizmos** — Visual 3D indicators showing keyframe camera poses in the scene
+### ⭐ Extra Implementations
 
-#### Deterministic Export
-- **Save camera path** — Export keyframes and settings to a `camera-path.json` file
-- **Load camera path** — Import a saved path to restore keyframes and duration
-- **Reproducible output** — Re-exporting with the same path file produces identical MP4 output (given the same environment and encoder)
+> **The following 3 extra features were implemented beyond the core requirements:**
 
-#### Export Progress & Cancellation
-- **Progress indicator** — Real-time percentage display during export
-- **Safe cancellation** — Cancel button that stops export cleanly without corrupting output or leaving temporary files
+#### 1. Timeline Editor
+- Draggable keyframe list — reorder keyframes via drag-and-drop
+- Timeline scrubber — drag to preview any point along the camera path
+- Camera frustum gizmos — 3D pyramid indicators showing each keyframe's camera pose in the scene
 
-#### Offscreen Rendering
-- **Fixed-resolution export** — Video renders at a consistent resolution (default 1280×720) regardless of window size
-- **Non-intrusive export** — Main viewer canvas remains unchanged during export
+#### 2. Deterministic Export
+- Save camera path and render settings to a `path.json` file
+- Load a saved path to restore keyframes and export settings
+- Re-running export with the same path file produces **identical MP4 output**
+
+#### 3. Progress + Cancellation
+- Visible percent-complete progress bar during export
+- Cancel button that safely stops export **without corrupting output** or leaving temporary files
 
 ---
 
