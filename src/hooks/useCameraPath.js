@@ -230,6 +230,18 @@ export function useCameraPath({ cameraRef, controlsRef, rendererRef }) {
     controls.enabled = true;
   }, [keyframes, cameraRef, controlsRef, rendererRef]);
 
+  /**
+   * Load keyframes from external source (e.g., saved path file)
+   * @param {Array} newKeyframes - Array of keyframe objects
+   */
+  const loadKeyframes = useCallback((newKeyframes) => {
+    if (!Array.isArray(newKeyframes)) {
+      console.error('loadKeyframes: expected array');
+      return;
+    }
+    setKeyframes(newKeyframes);
+  }, []);
+
   return {
     // State
     keyframes,
@@ -241,6 +253,7 @@ export function useCameraPath({ cameraRef, controlsRef, rendererRef }) {
     removeKeyframe,
     reorderKeyframes,
     clearKeyframes,
+    loadKeyframes,  // For loading saved paths
     playPath,
     stopPlayback,
     seekTo

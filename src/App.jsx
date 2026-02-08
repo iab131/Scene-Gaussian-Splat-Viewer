@@ -20,6 +20,8 @@ import { ExportDialog } from './components/ExportDialog';
 // Utils
 import { performAutoFrame, resetCameraView } from './utils/cameraUtils';
 import { startPathExport } from './utils/exportUtils';
+import { serializeCameraPath, deserializeCameraPath, saveCameraPath, loadCameraPath } from './utils/pathIO';
+import * as THREE from 'three';
 
 
 export default function App() {
@@ -89,6 +91,7 @@ export default function App() {
     removeKeyframe,
     reorderKeyframes,
     clearKeyframes,
+    loadKeyframes,
     playPath,
     stopPlayback,
     seekTo
@@ -195,6 +198,59 @@ export default function App() {
     fileInputRef.current?.click();
   }, []);
 
+  // Save camera path to file
+  const handleSavePath = useCallback(async (durationMs) => {
+    if (keyframes.length < 2) {
+      alert('Need at least 2 keyframes to save a path');
+      return;
+    }
+
+    const pathData = serializeCameraPath({
+      keyframes,
+      exportSettings: {
+        duration: durationMs / 1000, // Convert to seconds
+        fps: 30,
+        width: 1280,
+        height: 720
+      },
+      metadata: {
+        name: 'Camera Path',
+        description: `${keyframes.length} keyframe camera path`
+      }
+    });
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const saved = await saveCameraPath(pathData, `camera-path_${timestamp}.json`);
+    
+    if (saved) {
+      console.log('Camera path saved successfully');
+    }
+  }, [keyframes]);
+
+  // Load camera path from file
+  const handleLoadPath = useCallback(async (setDuration) => {
+    try {
+      const data = await loadCameraPath();
+      if (!data) return; // User cancelled
+      
+      const { keyframes: loadedKeyframes, exportSettings } = deserializeCameraPath(data, THREE);
+      
+      // Load keyframes into state
+      loadKeyframes(loadedKeyframes);
+      
+      // Update duration if provided
+      if (exportSettings?.duration && setDuration) {
+        setDuration(exportSettings.duration * 1000); // Convert to ms
+      }
+      
+      console.log(`Loaded ${loadedKeyframes.length} keyframes from saved path`);
+      
+    } catch (err) {
+      console.error('Failed to load camera path:', err);
+      alert('Failed to load camera path: ' + err.message);
+    }
+  }, [loadKeyframes]);
+
   return (
     <div
       className="relative w-screen h-screen bg-[#001524] overflow-hidden font-mono text-white"
@@ -245,6 +301,8 @@ export default function App() {
           onPlayPath={handlePlayPath}
           onStopPlayback={handleStopPlayback}
           onSeek={handleSeek}
+          onSavePath={handleSavePath}
+          onLoadPath={handleLoadPath}
           disabled={isExporting}
         />
       )}
