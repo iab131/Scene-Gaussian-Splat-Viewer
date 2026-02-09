@@ -20,7 +20,7 @@ export function useCameraPath({ cameraRef, controlsRef, rendererRef }) {
   const playbackRef = useRef(null);
   const startTimeRef = useRef(0);
   const durationRef = useRef(5000); // Default 5 second playback
-  const controlsStateRef = useRef({ enabled: true });
+  const controlsStateRef = useRef({ enabled: true, target: new THREE.Vector3() });
 
   /**
    * Add a keyframe at the current camera position
@@ -100,16 +100,11 @@ export function useCameraPath({ cameraRef, controlsRef, rendererRef }) {
     if (controlsRef.current) {
       controlsRef.current.enabled = controlsStateRef.current.enabled;
       
-      // Update orbit controls target to current camera view
-      const camera = cameraRef.current;
-      if (camera) {
-        const forward = new THREE.Vector3();
-        camera.getWorldDirection(forward);
-        controlsRef.current.target.copy(camera.position).add(forward.multiplyScalar(5));
-        controlsRef.current.update();
-      }
+      // Restore orbit controls target to saved position
+      controlsRef.current.target.copy(controlsStateRef.current.target);
+      controlsRef.current.update();
     }
-  }, [cameraRef, controlsRef]);
+  }, [controlsRef]);
 
   /**
    * Start path playback
@@ -132,6 +127,7 @@ export function useCameraPath({ cameraRef, controlsRef, rendererRef }) {
 
     // Save and disable controls to prevent interference during playback
     controlsStateRef.current.enabled = controls.enabled;
+    controlsStateRef.current.target.copy(controls.target);
     controls.enabled = false;
 
     // CRITICAL: Set camera to FIRST keyframe IMMEDIATELY before animation starts
