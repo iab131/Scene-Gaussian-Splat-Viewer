@@ -2,7 +2,7 @@
 
 A web-based Gaussian Splat viewer with camera path recording and MP4 video export.
 
-[Demo Video](https://youtu.be/EPXJpeUkBSA) · [Design Notes](https://docs.google.com/document/d/1GqOC-KRD-gLKe2yLE4LjlUDY6eg_-U8Q49oFyJRiXCg/edit?usp=sharing)
+[Demo Video](https://youtu.be/EPXJpeUkBSA) · [Design Notes](Gaussian%20Splat%20Viewer%20Design%20Note.pdf)
 
 ## Quick Start
 
