@@ -59,6 +59,7 @@ export default function App() {
     progress,
     hasScene,
     isDragging,
+    loadFromUrl,
     handleFileChange,
     onDragOver,
     onDragLeave,
@@ -198,6 +199,11 @@ export default function App() {
     fileInputRef.current?.click();
   }, []);
 
+  // Load sample file by URL
+  const handleLoadSample = useCallback((url) => {
+    loadFromUrl(url);
+  }, [loadFromUrl]);
+
   // Save camera path to file
   const handleSavePath = useCallback(async (durationMs) => {
     if (keyframes.length < 2) {
@@ -274,7 +280,7 @@ export default function App() {
       <DragOverlay isDragging={isDragging} />
       
       {!hasScene && !loading && !isDragging && (
-        <EmptyState onSelectFile={handleSelectFile} />
+        <EmptyState onSelectFile={handleSelectFile} onLoadSample={handleLoadSample} />
       )}
 
       <LoadingOverlay

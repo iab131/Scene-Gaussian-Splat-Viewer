@@ -60,6 +60,45 @@ export function useFileLoader({ viewerRef, sceneRef, onLoadStart, onLoadComplete
     }
   }, [viewerRef, sceneRef, onLoadStart, onLoadComplete]);
 
+  const loadFromUrl = useCallback(async (url) => {
+    setLoading(true);
+    if (onLoadStart) onLoadStart();
+
+    try {
+      // Clear scene first
+      const count = viewerRef.current.getSceneCount();
+      for (let i = count - 1; i >= 0; i--) {
+        await viewerRef.current.removeSplatScene(i);
+      }
+
+      const filename = url.split('/').pop().toLowerCase();
+      const format = filename.endsWith('.ply') ? SceneFormat.Ply : SceneFormat.KSplat;
+
+      await viewerRef.current.addSplatScene(url, {
+        format: format,
+        showLoadingUI: false,
+        progressiveLoad: false,
+        onProgress: (percent) => setProgress(percent)
+      });
+
+      const splatMesh = viewerRef.current.getSplatMesh();
+      if (splatMesh && sceneRef.current) {
+        sceneRef.current.add(splatMesh);
+      }
+
+      setHasScene(true);
+
+      setTimeout(() => {
+        if (onLoadComplete) onLoadComplete();
+      }, 200);
+
+    } catch (err) {
+      console.error("Loader Error (URL):", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [viewerRef, sceneRef, onLoadStart, onLoadComplete]);
+
   const handleFileChange = useCallback((event) => {
     const file = event.target.files[0];
     if (file) loadFile(file);
@@ -92,6 +131,7 @@ export function useFileLoader({ viewerRef, sceneRef, onLoadStart, onLoadComplete
     hasScene,
     isDragging,
     loadFile,
+    loadFromUrl,
     handleFileChange,
     onDragOver,
     onDragLeave,
