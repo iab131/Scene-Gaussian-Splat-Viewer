@@ -50,6 +50,7 @@ export default function App() {
     cameraRef,
     rendererRef,
     sceneRef,
+    hasSceneRef,
     keysPressed
   } = useThreeSetup(containerRef, { setFps, setSplatCount });
 
@@ -70,6 +71,9 @@ export default function App() {
     onLoadStart: () => clearKeyframesRef.current(),
     onLoadComplete: () => resetCameraView(cameraRef.current, controlsRef.current)
   });
+
+  // Keep hasSceneRef in sync so the render loop can gate rendering
+  hasSceneRef.current = hasScene;
 
   // Walk controls
   const {

@@ -18,6 +18,7 @@ export function useThreeSetup(containerRef, { setFps, setSplatCount }) {
   const cameraRef = useRef(null);
   const rendererRef = useRef(null);
   const sceneRef = useRef(null);
+  const hasSceneRef = useRef(false);
   const walkSpeedRef = useRef(3.0);
   const keysPressed = useRef({
     forward: false,
@@ -86,6 +87,13 @@ export function useThreeSetup(containerRef, { setFps, setSplatCount }) {
       requestRef.current = requestAnimationFrame(animate);
 
       const now = performance.now();
+
+      // Skip all expensive work when no scene is loaded
+      if (!hasSceneRef.current) {
+        walkLastTime = now;
+        return;
+      }
+
       frames++;
       if (now - lastTime >= 1000) {
         setFps(frames);
@@ -172,6 +180,7 @@ export function useThreeSetup(containerRef, { setFps, setSplatCount }) {
     cameraRef,
     rendererRef,
     sceneRef,
+    hasSceneRef,
     walkSpeedRef,
     keysPressed
   };
